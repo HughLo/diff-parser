@@ -4,7 +4,7 @@ module.exports = {
   target: "node",
   entry: {
     main: "./main.js",
-    diff: "./diff-parser.js"
+    diff: "./diff-parser.js",
   },
   output: {
     filename: "[name].bundle.js"
