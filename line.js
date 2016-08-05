@@ -48,7 +48,7 @@ class LineReader extends stream.Transform {
 
     //@followings are debug variables
     this.total_len = 0;
-    this.line_couont = 0;
+    this.line_count = 0;
 	}
 
 	_transform(chunk, encoding, next) {
@@ -60,21 +60,23 @@ class LineReader extends stream.Transform {
 		if(this.unfinished !== null && this.len > 0) {
 			target_chunk = new Buffer(this.len + chunk.length);
 			let copyed_len = this.unfinished.copy(target_chunk, 0, 0, this.len);
-			if(copyed_len != this.len) throw `buffer copy error 1 (copyed ${copyed_len} src ${this.len})`;
+			if(copyed_len !== this.len) throw `buffer copy error 1 (copyed ${copyed_len} src ${this.len})`;
 			copyed_len = chunk.copy(target_chunk, this.len);
-			if(copyed_len != chunk.length) throw `buffer copy error 2 (copyed ${copyed_len} src ${chunk.length})`;
+			if(copyed_len !== chunk.length) throw `buffer copy error 2 (copyed ${copyed_len} src ${chunk.length})`;
+			this.len = 0;
 		}
 		else {
 			target_chunk = chunk;
 		}
 
-		for(let v of this._split_lines(chunk)) {
+		for(let v of this._split_lines(target_chunk)) {
       ++this.line_count;
+			//console.log(v.Data.toString());
 			this.push(v);
 		}
 
 		if(this.len > 0) {
-			console.log(`still left ${this.len} bytes in the stream`);
+			//console.log(`still left ${this.len} bytes in the stream`);
 		}
 
     next();
@@ -86,6 +88,9 @@ class LineReader extends stream.Transform {
 	  for(let i = 0; i < chunk.length; ++i) {
 	    let end_pos = -1;
 	    let end_token = null;
+
+			//console.log(`index ${i} end pos ${end_pos}`);
+
 	    if(chunk[i] === LF_CODE) {
 	      if(chunk[i-1] === CR_CODE) {
 	        end_pos = i - 1;
@@ -98,7 +103,8 @@ class LineReader extends stream.Transform {
 	    }
 	    else if(chunk[i] === CR_CODE) {
 	      //next byte is not LF or this is the last byte
-	      if((i+1 < chunk.length && chunk[i+1] !== LF) || i+1 === chunk.length) {
+	      if((i+1 < chunk.length && chunk[i+1] !== LF_CODE) || i+1 === chunk.length) {
+					//console.log(`line end with CR chunk length ${chunk.length} next byte ${chunk[i+1]}`);
 	        end_pos = i;
 	        end_token = LINE_END.CR;
 	      }
@@ -106,7 +112,8 @@ class LineReader extends stream.Transform {
 
 	    //find a new line
 	    if(end_pos !== -1) {
-	      let app_buf = end_pos > start_pos ? chunk.slice(start_pos, end_pos) : null;
+				//console.log(`start ${start_pos} end ${end_pos}`);
+	      let app_buf = end_pos > start_pos ? new Buffer(chunk.slice(start_pos, end_pos)) : new Buffer(0);
 				yield new Line(app_buf, end_token);
 	      start_pos = i+1;
 	    }
@@ -132,9 +139,15 @@ class LineReader extends stream.Transform {
 		}
 	}
 
+	//return the total handled data length in bytes
   GetTotalLen() {
     return this.total_len;
   }
+
+	//return how many lines have been pushed into read stream
+	GetLineCount() {
+		return this.line_count;
+	}
 }
 
 export {

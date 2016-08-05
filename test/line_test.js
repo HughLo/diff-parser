@@ -27,18 +27,39 @@ describe("test parse line", function() {
     //disable timeout becuase the test file is so big
     this.timeout(0);
 
-    let line_num = 0;
-		let line_reader = new LineReader();
-    let src_stream = fs.createReadStream(path.join(__dirname, "total_diff.patch"));
-    let des_stream = new MockDest();
+    const test_data = [
+      {
+        path: "testDiff.diff",
+        length: 12781,
+        lines: 222
+      },
+      {
+        path: "total_diff.patch",
+        length: 411624381,
+        lines: 6641765,
+      }
+    ];
 
-    console.log("read file: " + path.join(__dirname, "total_diff.patch"));
+    let exec_count = 0;
 
-    src_stream.pipe(line_reader).pipe(des_stream);
-    des_stream.on('finish', function() {
-      assert.equal(des_stream.GetLineCount(), 6641765);
-      assert.equal(line_reader.GetTotalLen(), 411624381);
-      done();
-    })
+    for(let v of test_data) {
+      let line_num = 0;
+      let file_name = path.join(__dirname, v.path);
+  		let line_reader = new LineReader();
+      let src_stream = fs.createReadStream(file_name);
+      let des_stream = new MockDest();
+
+      console.log(`read file: ${file_name}`);
+
+      src_stream.pipe(line_reader).pipe(des_stream);
+      des_stream.on('finish', function() {
+        assert.equal(line_reader.GetTotalLen(), v.length);
+        assert.equal(line_reader.GetLineCount(), v.lines);
+        ++exec_count;
+        if(exec_count === test_data.length) {
+          done();
+        }
+      })
+    }
 	})
 });
