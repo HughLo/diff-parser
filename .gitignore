@@ -1,0 +1,5 @@
+npm-debug.log
+*.diff
+*.patch
+node_modules/**
+*.bundle*
