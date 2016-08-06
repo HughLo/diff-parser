@@ -41,10 +41,16 @@ const CRLF = new LineEnd(END_WITH_CR_LF);
 let LINE_END = {LF, CR, CRLF};
 
 class LineReader extends stream.Transform {
-	constructor() {
+	//! __options__ are used to specify the line ending 
+	constructor(options) {
 		super({readableObjectMode: true});
 		this.unfinished = null;
 		this.len = 0;
+		this.options = options || {
+			unix_style: true, // use LF as line end
+			win_style: true,  // use CRLF as line end
+			mac_style: true,  // use CR as line end
+		}
 
     //@followings are debug variables
     this.total_len = 0;
@@ -52,8 +58,6 @@ class LineReader extends stream.Transform {
 	}
 
 	_transform(chunk, encoding, next) {
-    if(chunk.length === 0) this.push(null);
-
     this.total_len += chunk.length;
 		//concate the unhandled part of previous transform with the current chunk
 		let target_chunk = null;
@@ -75,11 +79,18 @@ class LineReader extends stream.Transform {
 			this.push(v);
 		}
 
+    next();
+	}
+
+	_flush(next) {
 		if(this.len > 0) {
-			//console.log(`still left ${this.len} bytes in the stream`);
+			coonsole.log("some data left. assum win style line ending");
+			this.push(
+				new Line(this.unfinished.slice(0, this.len), LINE_END.CRLF)
+				);
 		}
 
-    next();
+		next();
 	}
 
 	//split chunks into lines
@@ -92,18 +103,18 @@ class LineReader extends stream.Transform {
 			//console.log(`index ${i} end pos ${end_pos}`);
 
 	    if(chunk[i] === LF_CODE) {
-	      if(chunk[i-1] === CR_CODE) {
+	      if(chunk[i-1] === CR_CODE && this.options.win_style) {
 	        end_pos = i - 1;
 	        end_token = LINE_END.CRLF;
 	      }
-	      else {
+	      else if(this.options.unix_style){
 	        end_pos = i;
 	        end_token = LINE_END.LF;
 	      }
 	    }
 	    else if(chunk[i] === CR_CODE) {
 	      //next byte is not LF or this is the last byte
-	      if((i+1 < chunk.length && chunk[i+1] !== LF_CODE) || i+1 === chunk.length) {
+	      if((i+1 < chunk.length && chunk[i+1] !== LF_CODE) && this.options.mac_style) {
 					//console.log(`line end with CR chunk length ${chunk.length} next byte ${chunk[i+1]}`);
 	        end_pos = i;
 	        end_token = LINE_END.CR;
