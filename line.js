@@ -28,9 +28,10 @@ class LineEnd {
 };
 
 class Line {
-	constructor(data, end_token) {
+	constructor(data, end_token, line_count) {
 		this.Data = data;
 		this.EndToken = end_token;
+		this.LineCount = line_count;
 	}
 }
 
@@ -51,10 +52,10 @@ class LineReader extends stream.Transform {
 			win_style: true,  // use CRLF as line end
 			mac_style: true,  // use CR as line end
 		}
+		this.line_count = 0;
 
     //@followings are debug variables
     this.total_len = 0;
-    this.line_count = 0;
 	}
 
 	_transform(chunk, encoding, next) {
@@ -74,7 +75,6 @@ class LineReader extends stream.Transform {
 		}
 
 		for(let v of this._split_lines(target_chunk)) {
-      ++this.line_count;
 			//console.log(v.Data.toString());
 			this.push(v);
 		}
@@ -86,7 +86,7 @@ class LineReader extends stream.Transform {
 		if(this.len > 0) {
 			coonsole.log("some data left. assum win style line ending");
 			this.push(
-				new Line(this.unfinished.slice(0, this.len), LINE_END.CRLF)
+				new Line(this.unfinished.slice(0, this.len), LINE_END.CRLF, ++this.line_count)
 				);
 		}
 
@@ -125,7 +125,7 @@ class LineReader extends stream.Transform {
 	    if(end_pos !== -1) {
 				//console.log(`start ${start_pos} end ${end_pos}`);
 	      let app_buf = end_pos > start_pos ? new Buffer(chunk.slice(start_pos, end_pos)) : new Buffer(0);
-				yield new Line(app_buf, end_token);
+				yield new Line(app_buf, end_token, ++this.line_count);
 	      start_pos = i+1;
 	    }
 	  }
