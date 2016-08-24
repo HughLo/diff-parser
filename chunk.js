@@ -43,17 +43,35 @@ const UNKNOWN_STAGE = 0, INDEX_STAGE = 1, PROP_STAGE = 2, CONTENT_STAGE = 3;
 class CommonStage {
   constructor(emitter) {
     this.emitter = emitter;
+    this._construct_handler_map();
+  }
+
+  _construct_handler_map() {
+    let handler_map = new Map();
+    handler_map.set("Index:", () => {
+      this.emitter.emit("end");
+      this.emitter.emit("start", ps.substr(7));
+    });
+    handler_map.set("Property change on:", () => {
+      this.emitter.emit('props.start', ps.substr(21));
+    })
+
+    this.handler_map = handler_map;
   }
 
   //`data` is the content of line
   //`next` will be called if the `data` is not handled
   Handle(data, next) {
     let ps = data.toString().trimLeft();
-    if(ps.startWith("Index:")) {
-      this.emitter.emit("end");
-      this.emitter.emit("start", ps.substr(7));
+    let handled = false;
+    for(let [k, v] of this.handler_map) {
+      if(ps.startWith(k)) {
+        handled = true;
+        v(); break;
+      }
     }
-    else {
+
+    if(!handled) {
       next(data);
     }
   }
@@ -64,7 +82,8 @@ class CommonStage {
 }
 
 class UnknownStage extends CommonStage {
-  constructor() {
+  constructor(emitter) {
+    super(emitter);
   }
 
   Handle(data, next) {
@@ -74,52 +93,40 @@ class UnknownStage extends CommonStage {
   }
 }
 
-/*
-class IndexStage extends CommonStage {
-  constructor() {
-  }
-
-  Handle(data) {
-    super.Handle(data, (data) => {
-      let ps = data.toString().trimLeft();
-      if(ps.startWith("===")) {
-        //skip this line
-        super.emitter.emit("content.start");
-      }
-      else if(ps.startWith("---")) {
-        super.emitter.emit("index.original", ps.substr(5));
-      }
-      else if(ps.startWith("+++")) {
-        super.emitter.emit("index.target", ps.substr(5));
-      }
-    })
-  }
-}
-*/
-
 class PropStage extends CommonStage {
-  constructor() {
+  constructor(emitter) {
+    super(emitter)
+    _construct_handler_map();
+  }
+
+  _construct_handler_map() {
+    let handler_map = new Map();
+    let skip_line_handler = () => {};
+    let generic_handler = (evt_name, data) => {
+      return () => super.emitter.emit(evt_name, data);
+    }
+
+    handler_map.set("___", skip_line_handler);
+    handler_map.set("Added", generic_handler("props.start", ps.substr(7)));
+    handler_map.set("##", generic_handler("props.range", ps.substr(3)));
+    handler_map.set("+", generic_handler("props.start", ps.substr(1)));
+    handler_map.set("-", generic_handler("props.sub", ps.substr(1)));
+
+    this.handler_map = handler_map;
   }
 
   Handle(data, next) {
     super.Handle(data, (data) => {
       let ps = data.toString();
-      if(ps.startWith("___")) {
-        //skip this line
+      let handled = false;
+      for(let [k, v] of this.handler_map) {
+        if(ps.startWith(k)) {
+          handled = true;
+          v(); break; //??? Need bind here ???
+        }
       }
-      else if(ps.startWith("Added")) {
-        super.emitter.emit("props.start", ps.substr(7));
-      }
-      else if(ps.startWith("##")) {
-        super.emitter.emit("props.range", ps.substr(3));
-      }
-      else if(ps.startWith("+")) {
-        super.emitter.emit("props.add", ps.substr(1));
-      }
-      else if(ps.startWith("-")) {
-        super.emitter.emit("props.sub", ps.substr(1));
-      }
-      else {
+
+      if(!handled) {
         super.emitter.emit("error", "unknown trigger for 'Prop' stage");
       }
     });
@@ -127,45 +134,45 @@ class PropStage extends CommonStage {
 }
 
 class ContentStage extends CommonStage {
-  constructor() {
+  constructor(emitter) {
+    super(emitter)
+  }
+
+  _construct_handler_map() {
+    let handler_map = new Map();
+    let generic_handler = (evt_name, data) => {
+      return () => super.emitter.emit(evt_name, data);
+    }
+
+    handler_map.set("===", generic_handler("content.start", ""));
+    handler_map.set("---", generic_handler("content.original", ps.substr(5)));
+    handler_map.set("@@", generic_handler("content.range", ps.substr(4, ps.length-5)));
+    handler_map.set("+", generic_handler("content.add", ps.substr(1)));
+    handler_map.set("-", generic_handler("content.sub", ps.substr(1)));
+    handler_map.set(" ", generic_handler("content.env", ps.substr(1)));
+
+    this.handler_map = handler_map;
   }
 
   Handle(data, next) {
     super.Handle(data, (data) => {
       let ps = data.toString();
-      if(ps.startWith("===")) {
-        //skip this line
-        super.emitter.emit("content.start");
+      let handled = false;
+      for(let [k, v] of this.handler_map) {
+        if(ps.startWith(k)) {
+          handled = true;
+          v(); break; //??? Need bind here ???
+        }
       }
-      else if(ps.startWith("---")) {
-        super.emitter.emit("content.original", ps.substr(5));
-      }
-      else if(ps.startWith("+++")) {
-        super.emitter.emit("content.target", ps.substr(5));
-      }
-      else if(ps.startWith("@@")) {
-        super.emitter.emit("content.range", ps.substr(4, ps.length-5));
-      }
-      else if(ps.startWith("+")) {
-        super.emitter.emit("content.add", ps.substr(1));
-      }
-      else if(ps.startWith("-")) {
-        super.emitter.emit("content.sub", ps.substr(1));
-      }
-      else if(ps.startWith(" ")) {
-        super.emitter.emit("content.env", ps.substr(1));
-      }
-      else if(ps.startWith("Property change on:")) {
-        super.emitter.emit('props.start', ps.substr(21));
-      }
-      else {
+
+      if(!handled) {
         super.emitter.emit("error", "unknown trigger for 'Content' stage");
       }
     });
   }
 }
 
-class StageMgr extends events.EventEmitter {
+class StageMgr {
   constructor() {
     this.emitter = new events.EventEmitter();
     _construct_stage_map();
@@ -198,6 +205,10 @@ class StageMgr extends events.EventEmitter {
     this.emitter.on('content.original', () => {
       
     });
+
+    this.emitter.on('error', (e) => {
+
+    })
   }
 
   Handle(data) {
